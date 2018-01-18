@@ -1,0 +1,194 @@
+﻿@using WebDbClient.Models
+
+@{
+    ViewBag.Title = "Orders Report";
+}
+
+@section Scripts {
+    <script>
+        var csv;
+        var model = {
+            orders: ko.observableArray(),
+            dateFrom: ko.observable($.datepicker.formatDate("yy-mm-dd", new Date("1996-07-01"))),
+            dateTo: ko.observable($.datepicker.formatDate("yy-mm-dd", new Date("1996-07-10"))),
+            displayReport: ko.observable(false),
+            sendMail: ko.observable(false)
+        };
+
+        $(document).ready(function () {
+            //getAllItems();
+            ko.applyBindings(model);
+        });
+
+        function sendAjaxRequest(httpMethod, callback, url, reqData) {
+            $.ajax("/api/web" + (url ? "/" + url : ""), {
+                type: httpMethod,
+                success: callback,
+                data: reqData
+            });
+        }
+
+        function getAllItems() {
+            sendAjaxRequest("GET", function (data) {
+                model.orders.removeAll();
+                for (var i = 0; i < data.length; i++) {
+                    model.orders.push(data[i]);
+                }
+            });
+        }
+
+        //function removeItem(item) {
+        //    sendAjaxRequest("DELETE", function () {
+        //        for (var i = 0; i < model.orders().length; i++) {
+        //            if (model.orders()[i].ReservationId == item.ReservationId) {
+        //                model.orders.remove(model.orders()[i]);
+        //                break;
+        //            }
+        //        }
+        //    }, item.ReservationId);
+        //}
+
+        function handleFilterClick() {
+            sendAjaxRequest("GET", function (data) {
+                model.orders.removeAll();
+                for (var i = 0; i < data.length; i++) {
+                    model.orders.push(data[i]);
+                }
+            },
+                ko.unwrap(model.dateFrom) + "/" + ko.unwrap(model.dateTo)
+            );
+            model.displayReport(true);
+        }
+
+        function handleChooseDatesClick() {
+            model.displayReport(false);
+        }
+
+        function handleSaveExcelClick() {
+            var propertyOrder = ["Номер заказа",
+                "Дата заказа",
+                "Артикул товара",
+                "Название",
+                "Количество",
+                "Цена за ед.",
+                "Сумма"];
+
+            csv = new Csv(propertyOrder);
+
+            for (var i = 0; i < model.orders().length; i++) {
+                csv.add({
+                    "Номер заказа": model.orders()[i]["OrderId"],
+                    "Дата заказа": model.orders()[i]["OrderDate"],
+                    "Артикул товара": model.orders()[i]["ProductCode"],
+                    "Название": model.orders()[i]["Name"],
+                    "Количество": model.orders()[i]["ItemCount"],
+                    "Цена за ед.": model.orders()[i]["ItemPrice"].toString().replace('.', ','),
+                    "Сумма": "=E" + i + "*F" + i
+                });
+            }
+
+            csv.saveAs("report.csv", ";", true);
+            if (ko.unwrap(model.sendMail))
+                handleSendExcelToMailClick();
+        }
+
+        function handleSendExcelToMailClick() {
+            var link = "mailto:" + $("#email").val() + "?subject=" + $("#theme").val()
+                + "&body=" + $("#message").val();
+
+            // This action should open the default email app:
+            window.location.href = link;
+
+            // , and if that doesn't work, try this instead:
+            window.open(link);
+        }
+
+    </script>
+}
+
+@section Body {
+    <div id="report" class="section panel panel-primary" data-bind="if: model.displayReport">
+        <div class="panel-heading">Заказы</div>
+        <div class="panel-body">
+            <table class="table table-striped table-condensed">
+                <thead>
+                    <tr>
+                        <th>Номер заказа</th>
+                        <th>Дата заказа</th>
+                        <th>Артикул товара</th>
+                        <th>Название</th>
+                        <th>Количество</th>
+                        <th>Цена за ед.</th>
+                        @*<th></th>*@
+                    </tr>
+                </thead>
+                <tbody data-bind="foreach: model.orders">
+                    <tr>
+                        <td data-bind="text: OrderId"></td>
+                        <td data-bind="text: $.datepicker.formatDate('yy-mm-dd', new Date(OrderDate))"></td>
+                        <td data-bind="text: ProductCode"></td>
+                        <td data-bind="text: Name"></td>
+                        <td data-bind="text: ItemCount"></td>
+                        <td data-bind="text: ItemPrice"></td>
+                        <td>
+                            @*<button class="btn btn-xs btn-primary"
+                                        data-bind="click: removeItem">
+                                    Удалить
+                                </button>*@
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <button class="btn btn-primary"
+                    data-bind="click: handleChooseDatesClick">
+                Фильтровать по временному диапазону
+            </button>
+            <button class="btn btn-primary"
+                    data-bind="click: handleSaveExcelClick">
+                Сохранить отчет в CSV-формате
+            </button>
+            <label>Отправить email </label>
+            <input class="glyphicon-chevron-down" type="checkbox" data-bind="checked: model.sendMail">
+            <div class="form-horizontal" data-bind="if: model.sendMail">
+                <hr/>
+                <div class="form-group">
+                    <label for="email" class="col-sm-2 control-label">Email</label>
+                    <div class="col-sm-10">
+                        <input type="email" class="form-control" id="email" name="email" placeholder="example@domain.com" value="">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="theme" class="col-sm-2 control-label">Theme</label>
+                    <div class="col-sm-10">
+                        <input type="text" class="form-control" id="theme" name="theme" placeholder="Theme of mail" value="">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="message" class="col-sm-2 control-label">Message</label>
+                    <div class="col-sm-10">
+                        <textarea id="message" class="form-control" rows="4" name="message"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="filter" class="section panel panel-primary" data-bind="ifnot : model.displayReport">
+        <div class="panel-heading">
+            Выбрать временной диапазон
+        </div>
+        <div class="panel-body">
+            <div class="form-group">
+                <label>Начиная с</label>
+                <input class="form-control" data-bind="value: model.dateFrom" type="date"/>
+            </div>
+            <div class="form-group">
+                <label>Заканчивая</label>
+                <input class="form-control" data-bind="value: model.dateTo" type="date"/>
+            </div>
+            <button class="btn btn-primary"
+                    data-bind="click: handleFilterClick">
+                Выполнить
+            </button>
+        </div>
+    </div>
+}
